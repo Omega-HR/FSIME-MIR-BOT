@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>MIR Bot — FSIME Operations</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
   body{font-family:'Segoe UI',Arial,sans-serif;background:#f0f4f8;height:100vh;display:flex;flex-direction:column}
@@ -51,9 +52,12 @@
   .send-btn{width:38px;height:38px;border-radius:50%;border:none;background:#1a3a6b;color:#fff;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
   .send-btn:disabled{background:#cbd5e1;cursor:not-allowed}
   .dash{flex:1;overflow-y:auto;padding:14px}
-  .dash-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+  .dash-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px}
   .dash-title{font-size:15px;font-weight:600;color:#1e293b}
+  .dash-actions{display:flex;gap:8px}
   .new-btn{padding:7px 14px;border-radius:20px;border:1px solid #1a3a6b;background:#fff;color:#1a3a6b;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit}
+  .export-btn{padding:7px 14px;border-radius:20px;border:none;background:#16a34a;color:#fff;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:5px}
+  .export-btn:hover{background:#15803d}
   .stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px}
   .stat{background:#fff;border-radius:8px;padding:10px 12px;border:1px solid #e2e8f0}
   .stat-n{font-size:24px;font-weight:700}
@@ -112,22 +116,22 @@
     <input class="setup-input" type="text" id="setup-name" placeholder="Your full name" />
     <div style="font-size:12px;font-weight:600;color:#1e293b;margin-bottom:8px">Select your role:</div>
     <div class="role-grid">
-      <div class="role-card" onclick="selectRole('Operations')">
+      <div class="role-card" onclick="selectRole('Operations',this)">
         <div class="role-icon">👷</div>
         <div class="role-name">Operations</div>
         <div class="role-desc">Submit MIRs, view Dashboard</div>
       </div>
-      <div class="role-card" onclick="selectRole('Approver')">
+      <div class="role-card" onclick="selectRole('Approver',this)">
         <div class="role-icon">✅</div>
         <div class="role-name">Approver</div>
         <div class="role-desc">Submit & approve MIRs</div>
       </div>
-      <div class="role-card" onclick="selectRole('Manager')">
+      <div class="role-card" onclick="selectRole('Manager',this)">
         <div class="role-icon">📊</div>
         <div class="role-name">Manager</div>
         <div class="role-desc">Full access & status updates</div>
       </div>
-      <div class="role-card" onclick="selectRole('Admin')">
+      <div class="role-card" onclick="selectRole('Admin',this)">
         <div class="role-icon">🔧</div>
         <div class="role-name">Admin</div>
         <div class="role-desc">Full control — HR/Procurement</div>
@@ -177,24 +181,19 @@ let messages = [];
 let busy = false;
 let selectedRole = '';
 let currentUser = null;
+let allMirs = [];
 
-function getUser() {
-  const u = localStorage.getItem('fsime_user');
-  return u ? JSON.parse(u) : null;
-}
+function getUser() { const u=localStorage.getItem('fsime_user'); return u?JSON.parse(u):null; }
 
-function selectRole(role) {
+function selectRole(role, el) {
   selectedRole = role;
-  document.querySelectorAll('.role-card').forEach(c => c.classList.remove('selected'));
-  event.currentTarget.classList.add('selected');
+  document.querySelectorAll('.role-card').forEach(c=>c.classList.remove('selected'));
+  el.classList.add('selected');
 }
 
 function activateUser() {
   const name = document.getElementById('setup-name').value.trim();
-  if (!name || !selectedRole) {
-    document.getElementById('setup-err').style.display = 'block';
-    return;
-  }
+  if (!name || !selectedRole) { document.getElementById('setup-err').style.display='block'; return; }
   const user = { name, role: selectedRole };
   localStorage.setItem('fsime_user', JSON.stringify(user));
   currentUser = user;
@@ -202,165 +201,180 @@ function activateUser() {
 }
 
 function resetUser() {
-  if (confirm('Change your profile? This will reset your session.')) {
-    localStorage.removeItem('fsime_user');
-    location.reload();
-  }
+  if (confirm('Change your profile? This will reset your session.')) { localStorage.removeItem('fsime_user'); location.reload(); }
 }
 
 function startApp() {
-  document.getElementById('setup-screen').style.display = 'none';
-  document.getElementById('view-chat').className = 'view active';
-  document.getElementById('user-badge').textContent = currentUser.name + ' · ' + currentUser.role;
-  const welcome = 'Hello ' + currentUser.name + '! Welcome to FSIME MIR Bot.\n\nI\'ll help you raise a Material Indent Request quickly.\n\nLet\'s start — what is the project name?';
-  messages = [{ role: 'assistant', content: welcome }];
-  addBubble('bot', welcome);
+  document.getElementById('setup-screen').style.display='none';
+  document.getElementById('view-chat').className='view active';
+  document.getElementById('user-badge').textContent=currentUser.name+' · '+currentUser.role;
+  const welcome='Hello '+currentUser.name+'! Welcome to FSIME MIR Bot.\n\nI\'ll help you raise a Material Indent Request quickly.\n\nLet\'s start — what is the project name?';
+  messages=[{role:'assistant',content:welcome}];
+  addBubble('bot',welcome);
 }
 
 function switchTab(tab) {
-  document.getElementById('view-chat').className = 'view' + (tab==='chat' ? ' active' : '');
-  document.getElementById('view-dash').className = 'view' + (tab==='dash' ? ' active' : '');
-  document.getElementById('tab-chat').className = 'nav-btn' + (tab==='chat' ? ' active' : '');
-  document.getElementById('tab-dash').className = 'nav-btn' + (tab==='dash' ? ' active' : '');
-  if (tab==='dash') renderDash();
+  document.getElementById('view-chat').className='view'+(tab==='chat'?' active':'');
+  document.getElementById('view-dash').className='view'+(tab==='dash'?' active':'');
+  document.getElementById('tab-chat').className='nav-btn'+(tab==='chat'?' active':'');
+  document.getElementById('tab-dash').className='nav-btn'+(tab==='dash'?' active':'');
+  if(tab==='dash') renderDash();
 }
 
-function esc(t) { return String(t||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function esc(t){return String(t||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 
-function addBubble(role, text) {
-  const area = document.getElementById('chat-area');
-  const row = document.createElement('div');
-  row.className = 'msg-row ' + role;
-  row.innerHTML = role === 'bot'
-    ? '<div class="av">🔥</div><div class="bubble bot">'+esc(text)+'</div>'
-    : '<div class="bubble user">'+esc(text)+'</div>';
-  area.appendChild(row);
-  area.scrollTop = area.scrollHeight;
+function addBubble(role,text){
+  const area=document.getElementById('chat-area');
+  const row=document.createElement('div');
+  row.className='msg-row '+role;
+  row.innerHTML=role==='bot'?'<div class="av">🔥</div><div class="bubble bot">'+esc(text)+'</div>':'<div class="bubble user">'+esc(text)+'</div>';
+  area.appendChild(row);area.scrollTop=area.scrollHeight;
 }
 
-function showTyping() {
-  const area = document.getElementById('chat-area');
-  const d = document.createElement('div');
-  d.id = 'typing'; d.className = 'msg-row bot';
-  d.innerHTML = '<div class="av">🔥</div><div class="typing-bubble"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>';
-  area.appendChild(d);
-  area.scrollTop = area.scrollHeight;
+function showTyping(){
+  const area=document.getElementById('chat-area');
+  const d=document.createElement('div');
+  d.id='typing';d.className='msg-row bot';
+  d.innerHTML='<div class="av">🔥</div><div class="typing-bubble"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>';
+  area.appendChild(d);area.scrollTop=area.scrollHeight;
 }
-function removeTyping() { const t=document.getElementById('typing'); if(t) t.remove(); }
+function removeTyping(){const t=document.getElementById('typing');if(t)t.remove();}
 
-async function sendMsg() {
-  if (busy) return;
-  const input = document.getElementById('user-input');
-  const text = input.value.trim();
-  if (!text) return;
-  input.value = '';
-  busy = true;
-  document.getElementById('send-btn').disabled = true;
-  addBubble('user', text);
-  messages.push({ role:'user', content:text });
+async function sendMsg(){
+  if(busy)return;
+  const input=document.getElementById('user-input');
+  const text=input.value.trim();
+  if(!text)return;
+  input.value='';busy=true;
+  document.getElementById('send-btn').disabled=true;
+  addBubble('user',text);
+  messages.push({role:'user',content:text});
   showTyping();
-  try {
-    const res = await fetch(WORKER_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model:'claude-haiku-4-5', max_tokens:1000, system:SYSTEM, messages:messages })
-    });
-    const data = await res.json();
+  try{
+    const res=await fetch(WORKER_URL,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-haiku-4-5',max_tokens:1000,system:SYSTEM,messages:messages})});
+    const data=await res.json();
     removeTyping();
-    if (data.error) { addBubble('bot','Error: '+data.error.message); busy=false; document.getElementById('send-btn').disabled=false; return; }
-    const reply = data.content&&data.content[0] ? data.content[0].text : 'Something went wrong. Please try again.';
-
-    if (reply.trim().startsWith('SUBMIT_MIR:')) {
-      const raw = reply.trim().replace('SUBMIT_MIR:','').trim();
-      let mir; try { mir=JSON.parse(raw); } catch(e) { mir=null; }
-      if (mir) {
-        mir.id = 'MIR-'+(1000+Math.floor(Math.random()*9000));
-        mir.name = currentUser.name;
-        mir.role = currentUser.role;
-        mir.status = 'Pending Approval';
-        mir.submittedAt = new Date().toISOString();
-        await fetch(WORKER_URL+'/save-mir', {
-          method:'POST',
-          headers:{'Content-Type':'application/json'},
-          body: JSON.stringify(mir)
-        });
-        const confirmText = 'MIR submitted successfully!\n\nID: '+mir.id+'\nSubmitted by: '+mir.name+' ('+mir.role+')\nProject: '+mir.project+' — '+mir.location+'\nCategory: '+mir.category+'\nMaterials: '+mir.materials+'\nDelivery: '+mir.deliveryDate+'\nPriority: '+mir.priority+'\nApprover: '+mir.approver+'\n\nYour request is saved and visible to the whole team. Need to raise another MIR?';
-        messages.push({ role:'assistant', content:confirmText });
-        addBubble('bot', confirmText);
+    if(data.error){addBubble('bot','Error: '+data.error.message);busy=false;document.getElementById('send-btn').disabled=false;return;}
+    const reply=data.content&&data.content[0]?data.content[0].text:'Something went wrong. Please try again.';
+    if(reply.trim().startsWith('SUBMIT_MIR:')){
+      const raw=reply.trim().replace('SUBMIT_MIR:','').trim();
+      let mir;try{mir=JSON.parse(raw);}catch(e){mir=null;}
+      if(mir){
+        mir.id='MIR-'+(1000+Math.floor(Math.random()*9000));
+        mir.name=currentUser.name;mir.role=currentUser.role;
+        mir.status='Pending Approval';mir.submittedAt=new Date().toISOString();
+        await fetch(WORKER_URL+'/save-mir',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(mir)});
+        const confirmText='MIR submitted successfully!\n\nID: '+mir.id+'\nSubmitted by: '+mir.name+' ('+mir.role+')\nProject: '+mir.project+' — '+mir.location+'\nCategory: '+mir.category+'\nMaterials: '+mir.materials+'\nDelivery: '+mir.deliveryDate+'\nPriority: '+mir.priority+'\nApprover: '+mir.approver+'\n\nYour request is saved and visible to the whole team. Need to raise another MIR?';
+        messages.push({role:'assistant',content:confirmText});
+        addBubble('bot',confirmText);
       }
-    } else {
-      messages.push({ role:'assistant', content:reply });
-      addBubble('bot', reply);
-    }
-  } catch(e) {
-    removeTyping();
-    addBubble('bot','Connection error. Please check your internet and try again.');
-  }
-  busy = false;
-  document.getElementById('send-btn').disabled = false;
-  document.getElementById('user-input').focus();
+    }else{messages.push({role:'assistant',content:reply});addBubble('bot',reply);}
+  }catch(e){removeTyping();addBubble('bot','Connection error. Please check your internet and try again.');}
+  busy=false;document.getElementById('send-btn').disabled=false;document.getElementById('user-input').focus();
 }
 
-function canUpdateStatus() {
-  return ['Approver','Manager','Admin'].includes(currentUser.role);
-}
+function canUpdateStatus(){return['Approver','Manager','Admin'].includes(currentUser.role);}
+function roleClass(r){if(r==='Operations')return 'r-operations';if(r==='Approver')return 'r-approver';if(r==='Manager')return 'r-manager';if(r==='Admin')return 'r-admin';return 'r-operations';}
+function statusClass(s){if(s==='Pending Approval')return 's-pending';if(s==='Approved')return 's-approved';if(s==='In Procurement')return 's-procure';if(s==='Delivered')return 's-delivered';return 's-pending';}
+function priClass(p){if(p==='Low')return 'p-low';if(p==='Medium')return 'p-medium';if(p==='High')return 'p-high';if(p==='Urgent')return 'p-urgent';return 'p-medium';}
 
-function roleClass(r) {
-  if(r==='Operations') return 'r-operations';
-  if(r==='Approver') return 'r-approver';
-  if(r==='Manager') return 'r-manager';
-  if(r==='Admin') return 'r-admin';
-  return 'r-operations';
-}
-function statusClass(s) {
-  if(s==='Pending Approval') return 's-pending';
-  if(s==='Approved') return 's-approved';
-  if(s==='In Procurement') return 's-procure';
-  if(s==='Delivered') return 's-delivered';
-  return 's-pending';
-}
-function priClass(p) {
-  if(p==='Low') return 'p-low';
-  if(p==='Medium') return 'p-medium';
-  if(p==='High') return 'p-high';
-  if(p==='Urgent') return 'p-urgent';
-  return 'p-medium';
-}
-
-async function updateStatus(id, val) {
-  await fetch(WORKER_URL+'/update-status', {
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({ id, status: val })
-  });
+async function updateStatus(id,val){
+  await fetch(WORKER_URL+'/update-status',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id,status:val})});
   renderDash();
 }
 
-async function renderDash() {
-  const el = document.getElementById('dashboard');
-  el.innerHTML = '<div class="loading">Loading all requests...</div>';
-  let mirs = [];
-  try {
-    const res = await fetch(WORKER_URL+'/mirs');
-    mirs = await res.json();
-  } catch(e) {
-    el.innerHTML = '<div class="empty"><div class="empty-icon">⚠️</div><div>Could not load MIRs. Check your connection.</div></div>';
-    return;
+function exportExcel(){
+  if(!allMirs.length){alert('No MIRs to export.');return;}
+  const wb = XLSX.utils.book_new();
+
+  // ── Sheet 1: Project Summary ──
+  const projects={};
+  allMirs.forEach(m=>{
+    const key=m.project+' | '+m.location;
+    if(!projects[key]) projects[key]={project:m.project,location:m.location,total:0,pending:0,approved:0,procurement:0,delivered:0,urgent:0,high:0,categories:new Set()};
+    const p=projects[key];
+    p.total++;
+    if(m.status==='Pending Approval') p.pending++;
+    if(m.status==='Approved') p.approved++;
+    if(m.status==='In Procurement') p.procurement++;
+    if(m.status==='Delivered') p.delivered++;
+    if(m.priority==='Urgent') p.urgent++;
+    if(m.priority==='High') p.high++;
+    if(m.category) m.category.split('/').forEach(c=>p.categories.add(c.trim()));
+  });
+
+  const summaryData=[['FSIME — MIR Project Summary','','','','','','','',''],
+    ['Generated on: '+new Date().toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}),'','','','','','','',''],
+    [''],
+    ['Project','Location','Total MIRs','Pending Approval','Approved','In Procurement','Delivered','Urgent/High','Material Categories']
+  ];
+  Object.values(projects).forEach(p=>{
+    summaryData.push([p.project,p.location,p.total,p.pending,p.approved,p.procurement,p.delivered,(p.urgent+p.high),[...p.categories].join(', ')]);
+  });
+
+  const ws1=XLSX.utils.aoa_to_sheet(summaryData);
+  ws1['!cols']=[{wch:30},{wch:20},{wch:12},{wch:18},{wch:12},{wch:18},{wch:12},{wch:14},{wch:40}];
+  ws1['!merges']=[{s:{r:0,c:0},e:{r:0,c:8}},{s:{r:1,c:0},e:{r:1,c:8}}];
+  XLSX.utils.book_append_sheet(wb,ws1,'Project Summary');
+
+  // ── Sheet 2: All MIRs Detail ──
+  const detailData=[['MIR ID','Submitted Date','Submitted By','Role','Project','Location','Category','Material Details','Delivery Date','Priority','Approver','Status']];
+  allMirs.forEach(m=>{
+    const d=new Date(m.submittedAt);
+    detailData.push([m.id,d.toLocaleDateString('en-GB'),m.name||'',m.role||'',m.project||'',m.location||'',m.category||'',m.materials||'',m.deliveryDate||'',m.priority||'',m.approver||'',m.status||'']);
+  });
+  const ws2=XLSX.utils.aoa_to_sheet(detailData);
+  ws2['!cols']=[{wch:12},{wch:14},{wch:20},{wch:14},{wch:25},{wch:20},{wch:20},{wch:50},{wch:14},{wch:10},{wch:20},{wch:18}];
+  XLSX.utils.book_append_sheet(wb,ws2,'All MIRs');
+
+  // ── Per-Project Sheets ──
+  const projectMirs={};
+  allMirs.forEach(m=>{
+    const key=m.project||'Unknown';
+    if(!projectMirs[key]) projectMirs[key]=[];
+    projectMirs[key].push(m);
+  });
+  Object.entries(projectMirs).forEach(([proj,mirs])=>{
+    const sheetData=[['Project: '+proj,'','','','','',''],
+      ['Total MIRs: '+mirs.length,'','','','','',''],[''],
+      ['MIR ID','Date','Submitted By','Category','Material Details','Delivery Date','Priority','Status']
+    ];
+    mirs.forEach(m=>{
+      const d=new Date(m.submittedAt);
+      sheetData.push([m.id,d.toLocaleDateString('en-GB'),m.name||'',m.category||'',m.materials||'',m.deliveryDate||'',m.priority||'',m.status||'']);
+    });
+    const wsP=XLSX.utils.aoa_to_sheet(sheetData);
+    wsP['!cols']=[{wch:12},{wch:14},{wch:20},{wch:20},{wch:50},{wch:14},{wch:10},{wch:18}];
+    wsP['!merges']=[{s:{r:0,c:0},e:{r:0,c:7}},{s:{r:1,c:0},e:{r:1,c:7}}];
+    const safeName=proj.replace(/[:\\\/\?\*\[\]]/g,'').substring(0,28);
+    XLSX.utils.book_append_sheet(wb,wsP,safeName);
+  });
+
+  XLSX.writeFile(wb,'FSIME_MIR_Report_'+new Date().toISOString().slice(0,10)+'.xlsx');
+}
+
+async function renderDash(){
+  const el=document.getElementById('dashboard');
+  el.innerHTML='<div class="loading">⏳ Loading all requests...</div>';
+  try{
+    const res=await fetch(WORKER_URL+'/mirs');
+    allMirs=await res.json();
+  }catch(e){
+    el.innerHTML='<div class="empty"><div class="empty-icon">⚠️</div><div>Could not load MIRs. Check your connection.</div></div>';return;
   }
-  if (mirs.length===0) {
-    el.innerHTML='<div class="empty"><div class="empty-icon">📋</div><div>No MIRs submitted yet.</div><div style="margin-top:8px;font-size:12px">Use the Bot tab to raise your first request.</div></div>';
-    return;
+  if(!allMirs.length){
+    el.innerHTML='<div class="empty"><div class="empty-icon">📋</div><div>No MIRs submitted yet.</div><div style="margin-top:8px;font-size:12px">Use the Bot tab to raise your first request.</div></div>';return;
   }
   const counts={'Pending Approval':0,'Approved':0,'In Procurement':0,'Delivered':0};
-  mirs.forEach(m=>{ if(counts[m.status]!==undefined) counts[m.status]++; });
+  allMirs.forEach(m=>{if(counts[m.status]!==undefined)counts[m.status]++;});
   const statColors={'Pending Approval':'#1d4ed8','Approved':'#15803d','In Procurement':'#a16207','Delivered':'#065f46'};
-  let html='<div class="dash-header"><div class="dash-title">FSIME — All Material Requests</div><button class="new-btn" onclick="switchTab(\'chat\')">+ New MIR</button></div>';
+  let html='<div class="dash-header"><div class="dash-title">FSIME — All Material Requests</div><div class="dash-actions"><button class="export-btn" onclick="exportExcel()">⬇ Download Excel</button><button class="new-btn" onclick="switchTab(\'chat\')">+ New MIR</button></div></div>';
   html+='<div class="stats-grid">';
   ['Pending Approval','Approved','In Procurement','Delivered'].forEach(s=>{
     html+='<div class="stat"><div class="stat-n" style="color:'+statColors[s]+'">'+counts[s]+'</div><div class="stat-l">'+s+'</div></div>';
   });
   html+='</div>';
-  mirs.forEach(mir=>{
+  allMirs.forEach(mir=>{
     const d=new Date(mir.submittedAt);
     const ds=d.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'});
     html+='<div class="mir-card"><div class="mir-top"><div>';
@@ -372,15 +386,11 @@ async function renderDash() {
     html+='<div class="mir-proj">🏗 '+esc(mir.project)+' &mdash; '+esc(mir.location)+'</div>';
     html+='<div class="mir-mat">🔥 '+esc(mir.category)+' &mdash; '+esc(mir.materials)+'</div>';
     html+='</div>';
-    if (canUpdateStatus()) {
+    if(canUpdateStatus()){
       html+='<select class="status-sel" onchange="updateStatus(\''+mir.id+'\', this.value)">';
-      ['Pending Approval','Approved','In Procurement','Delivered'].forEach(s=>{
-        html+='<option'+(mir.status===s?' selected':'')+'>'+s+'</option>';
-      });
+      ['Pending Approval','Approved','In Procurement','Delivered'].forEach(s=>{html+='<option'+(mir.status===s?' selected':'')+'>'+s+'</option>';});
       html+='</select>';
-    } else {
-      html+='<div class="readonly-status">'+esc(mir.status)+'</div>';
-    }
+    }else{html+='<div class="readonly-status">'+esc(mir.status)+'</div>';}
     html+='</div>';
     html+='<div class="mir-meta">';
     html+='<span>👤 '+esc(mir.name)+' · '+esc(mir.role)+'</span>';
@@ -392,11 +402,9 @@ async function renderDash() {
   el.innerHTML=html;
 }
 
-(function init() {
-  currentUser = getUser();
-  if (currentUser) {
-    startApp();
-  }
+(function init(){
+  currentUser=getUser();
+  if(currentUser) startApp();
 })();
 </script>
 </body>
