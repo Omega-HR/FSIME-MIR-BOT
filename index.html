@@ -15,6 +15,16 @@
   .nav{display:flex;gap:6px}
   .nav-btn{padding:5px 14px;border-radius:20px;border:1px solid rgba(255,255,255,0.3);background:transparent;color:rgba(255,255,255,0.7);font-size:12px;cursor:pointer;font-family:inherit}
   .nav-btn.active{background:#f59e0b;border-color:#f59e0b;color:#1a3a6b;font-weight:600}
+  .setup-screen{flex:1;display:flex;align-items:center;justify-content:center;padding:20px}
+  .setup-card{background:#fff;border-radius:12px;padding:28px;max-width:420px;width:100%;border:1px solid #e2e8f0;box-shadow:0 4px 12px rgba(0,0,0,0.08)}
+  .setup-icon{font-size:36px;margin-bottom:12px}
+  .setup-title{font-size:16px;font-weight:600;color:#1e293b;margin-bottom:6px}
+  .setup-sub{font-size:12px;color:#64748b;margin-bottom:18px;line-height:1.6}
+  .setup-input{width:100%;padding:10px 14px;border:1px solid #cbd5e1;border-radius:8px;font-size:13px;font-family:inherit;color:#1e293b;outline:none;margin-bottom:12px}
+  .setup-input:focus{border-color:#1a3a6b}
+  .setup-btn{width:100%;padding:10px;border-radius:8px;border:none;background:#1a3a6b;color:#fff;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit}
+  .setup-btn:hover{background:#15306b}
+  .setup-err{font-size:12px;color:#dc2626;margin-top:8px;display:none}
   .view{display:none;flex:1;flex-direction:column;overflow:hidden}
   .view.active{display:flex}
   .chat-area{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:10px}
@@ -77,7 +87,19 @@
   </div>
 </div>
 
-<div class="view active" id="view-chat">
+<!-- SETUP SCREEN (shown only once) -->
+<div class="setup-screen" id="setup-screen">
+  <div class="setup-card">
+    <div class="setup-icon">🔑</div>
+    <div class="setup-title">One-time Setup</div>
+    <div class="setup-sub">Enter your Anthropic API key to activate MIR Bot. This is saved on your device only and will not be asked again.</div>
+    <input class="setup-input" type="password" id="setup-key" placeholder="Paste API key (sk-ant-...)" />
+    <button class="setup-btn" onclick="activateBot()">Activate MIR Bot</button>
+    <div class="setup-err" id="setup-err">Invalid key. Please check and try again.</div>
+  </div>
+</div>
+
+<div class="view" id="view-chat">
   <div class="chat-area" id="chat-area"></div>
   <div class="input-row">
     <input class="msg-input" id="user-input" placeholder="Type your reply here..." onkeydown="if(event.key==='Enter')sendMsg()" />
@@ -90,8 +112,6 @@
 </div>
 
 <script>
-const API_KEY = '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';
-
 const SYSTEM = `You are MIR Bot, a Material Indent Request assistant for FSIME — a Passive Fire Safety company operating in UAE, Saudi Arabia, and Qatar.
 
 Collect the following details ONE question at a time, in this exact order:
@@ -118,26 +138,46 @@ let messages = [];
 let mirs = JSON.parse(localStorage.getItem('fsime_mirs') || '[]');
 let busy = false;
 
+function getKey() { return localStorage.getItem('fsime_api_key') || ''; }
 function saveMIRs() { localStorage.setItem('fsime_mirs', JSON.stringify(mirs)); }
 
-function switchTab(tab) {
-  document.getElementById('view-chat').className = 'view' + (tab==='chat' ? ' active' : '');
-  document.getElementById('view-dash').className = 'view' + (tab==='dash' ? ' active' : '');
-  document.getElementById('tab-chat').className = 'nav-btn' + (tab==='chat' ? ' active' : '');
-  document.getElementById('tab-dash').className = 'nav-btn' + (tab==='dash' ? ' active' : '');
-  document.getElementById('tab-dash').textContent = '📋 Dashboard' + (mirs.length ? ' ('+mirs.length+')' : '');
-  if (tab==='dash') renderDash();
+function activateBot() {
+  const k = document.getElementById('setup-key').value.trim();
+  if (!k.startsWith('sk-ant-')) {
+    document.getElementById('setup-err').style.display = 'block';
+    return;
+  }
+  localStorage.setItem('fsime_api_key', k);
+  document.getElementById('setup-screen').style.display = 'none';
+  document.getElementById('view-chat').className = 'view active';
+  startChat();
 }
 
-function esc(t) { return String(t||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function startChat() {
+  document.getElementById('tab-dash').textContent = '📋 Dashboard' + (mirs.length ? ' (' + mirs.length + ')' : '');
+  const welcome = 'Hello! Welcome to FSIME MIR Bot.\n\nI\'ll help you raise a Material Indent Request for your project quickly.\n\nKindly provide your details — let\'s start with your full name.';
+  messages.push({ role: 'assistant', content: welcome });
+  addBubble('bot', welcome);
+}
+
+function switchTab(tab) {
+  document.getElementById('view-chat').className = 'view' + (tab === 'chat' ? ' active' : '');
+  document.getElementById('view-dash').className = 'view' + (tab === 'dash' ? ' active' : '');
+  document.getElementById('tab-chat').className = 'nav-btn' + (tab === 'chat' ? ' active' : '');
+  document.getElementById('tab-dash').className = 'nav-btn' + (tab === 'dash' ? ' active' : '');
+  document.getElementById('tab-dash').textContent = '📋 Dashboard' + (mirs.length ? ' (' + mirs.length + ')' : '');
+  if (tab === 'dash') renderDash();
+}
+
+function esc(t) { return String(t || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
 
 function addBubble(role, text) {
   const area = document.getElementById('chat-area');
   const row = document.createElement('div');
   row.className = 'msg-row ' + role;
   row.innerHTML = role === 'bot'
-    ? '<div class="av">🔥</div><div class="bubble bot">'+esc(text)+'</div>'
-    : '<div class="bubble user">'+esc(text)+'</div>';
+    ? '<div class="av">🔥</div><div class="bubble bot">' + esc(text) + '</div>'
+    : '<div class="bubble user">' + esc(text) + '</div>';
   area.appendChild(row);
   area.scrollTop = area.scrollHeight;
 }
@@ -150,7 +190,7 @@ function showTyping() {
   area.appendChild(d);
   area.scrollTop = area.scrollHeight;
 }
-function removeTyping() { const t=document.getElementById('typing'); if(t) t.remove(); }
+function removeTyping() { const t = document.getElementById('typing'); if (t) t.remove(); }
 
 async function sendMsg() {
   if (busy) return;
@@ -161,50 +201,44 @@ async function sendMsg() {
   busy = true;
   document.getElementById('send-btn').disabled = true;
   addBubble('user', text);
-  messages.push({ role:'user', content:text });
+  messages.push({ role: 'user', content: text });
   showTyping();
   try {
     const res = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-api-key': API_KEY,
+        'x-api-key': getKey(),
         'anthropic-version': '2023-06-01',
         'anthropic-dangerous-allow-browser': 'true'
       },
-      body: JSON.stringify({
-        model: 'claude-haiku-4-5',
-        max_tokens: 1000,
-        system: SYSTEM,
-        messages: messages
-      })
+      body: JSON.stringify({ model: 'claude-haiku-4-5', max_tokens: 1000, system: SYSTEM, messages: messages })
     });
     const data = await res.json();
     removeTyping();
-    if (data.error) { addBubble('bot','Error: '+data.error.message); busy=false; document.getElementById('send-btn').disabled=false; return; }
-    const reply = data.content&&data.content[0] ? data.content[0].text : 'Something went wrong. Please try again.';
-
+    if (data.error) { addBubble('bot', 'Error: ' + data.error.message); busy = false; document.getElementById('send-btn').disabled = false; return; }
+    const reply = data.content && data.content[0] ? data.content[0].text : 'Something went wrong. Please try again.';
     if (reply.trim().startsWith('SUBMIT_MIR:')) {
-      const raw = reply.trim().replace('SUBMIT_MIR:','').trim();
-      let mir; try { mir=JSON.parse(raw); } catch(e) { mir=null; }
+      const raw = reply.trim().replace('SUBMIT_MIR:', '').trim();
+      let mir; try { mir = JSON.parse(raw); } catch (e) { mir = null; }
       if (mir) {
-        mir.id = 'MIR-'+(1000+Math.floor(Math.random()*9000));
+        mir.id = 'MIR-' + (1000 + Math.floor(Math.random() * 9000));
         mir.status = 'Pending Approval';
         mir.submittedAt = new Date().toISOString();
         mirs.unshift(mir);
         saveMIRs();
-        const confirmText = 'MIR submitted successfully!\n\nID: '+mir.id+'\nName: '+mir.name+' ('+mir.designation+')\nProject: '+mir.project+' — '+mir.location+'\nMaterials: '+mir.materials+'\nCategory: '+mir.category+'\nDelivery: '+mir.deliveryDate+'\nPriority: '+mir.priority+'\nApprover: '+mir.approver+'\n\nYour request is logged. Track it in the Dashboard. Need to raise another MIR?';
-        messages.push({ role:'assistant', content:confirmText });
+        const confirmText = 'MIR submitted successfully!\n\nID: ' + mir.id + '\nName: ' + mir.name + ' (' + mir.designation + ')\nProject: ' + mir.project + ' — ' + mir.location + '\nCategory: ' + mir.category + '\nMaterials: ' + mir.materials + '\nDelivery: ' + mir.deliveryDate + '\nPriority: ' + mir.priority + '\nApprover: ' + mir.approver + '\n\nYour request is logged. Track it in the Dashboard. Need to raise another MIR?';
+        messages.push({ role: 'assistant', content: confirmText });
         addBubble('bot', confirmText);
-        document.getElementById('tab-dash').textContent = '📋 Dashboard ('+mirs.length+')';
+        document.getElementById('tab-dash').textContent = '📋 Dashboard (' + mirs.length + ')';
       }
     } else {
-      messages.push({ role:'assistant', content:reply });
+      messages.push({ role: 'assistant', content: reply });
       addBubble('bot', reply);
     }
-  } catch(e) {
+  } catch (e) {
     removeTyping();
-    addBubble('bot','Connection error: '+e.message+'. Please check your internet and try again.');
+    addBubble('bot', 'Connection error: ' + e.message + '. Please check your internet and try again.');
   }
   busy = false;
   document.getElementById('send-btn').disabled = false;
@@ -212,68 +246,71 @@ async function sendMsg() {
 }
 
 function statusClass(s) {
-  if(s==='Pending Approval') return 's-pending';
-  if(s==='Approved') return 's-approved';
-  if(s==='In Procurement') return 's-procure';
-  if(s==='Delivered') return 's-delivered';
+  if (s === 'Pending Approval') return 's-pending';
+  if (s === 'Approved') return 's-approved';
+  if (s === 'In Procurement') return 's-procure';
+  if (s === 'Delivered') return 's-delivered';
   return 's-pending';
 }
 function priClass(p) {
-  if(p==='Low') return 'p-low';
-  if(p==='Medium') return 'p-medium';
-  if(p==='High') return 'p-high';
-  if(p==='Urgent') return 'p-urgent';
+  if (p === 'Low') return 'p-low';
+  if (p === 'Medium') return 'p-medium';
+  if (p === 'High') return 'p-high';
+  if (p === 'Urgent') return 'p-urgent';
   return 'p-medium';
 }
 
-function updateStatus(idx, val) { mirs[idx].status=val; saveMIRs(); renderDash(); }
+function updateStatus(idx, val) { mirs[idx].status = val; saveMIRs(); renderDash(); }
 
 function renderDash() {
   const el = document.getElementById('dashboard');
-  if (mirs.length===0) {
-    el.innerHTML='<div class="empty"><div class="empty-icon">📋</div><div>No MIRs submitted yet.</div><div style="margin-top:8px;font-size:12px">Use the Bot tab to raise your first request.</div></div>';
+  if (mirs.length === 0) {
+    el.innerHTML = '<div class="empty"><div class="empty-icon">📋</div><div>No MIRs submitted yet.</div><div style="margin-top:8px;font-size:12px">Use the Bot tab to raise your first request.</div></div>';
     return;
   }
-  const counts={'Pending Approval':0,'Approved':0,'In Procurement':0,'Delivered':0};
-  mirs.forEach(m=>{ if(counts[m.status]!==undefined) counts[m.status]++; });
-  const statColors={'Pending Approval':'#1d4ed8','Approved':'#15803d','In Procurement':'#a16207','Delivered':'#065f46'};
-  let html='<div class="dash-header"><div class="dash-title">FSIME — All Material Requests</div><button class="new-btn" onclick="switchTab(\'chat\')">+ New MIR</button></div>';
-  html+='<div class="stats-grid">';
-  ['Pending Approval','Approved','In Procurement','Delivered'].forEach(s=>{
-    html+='<div class="stat"><div class="stat-n" style="color:'+statColors[s]+'">'+counts[s]+'</div><div class="stat-l">'+s+'</div></div>';
+  const counts = { 'Pending Approval': 0, 'Approved': 0, 'In Procurement': 0, 'Delivered': 0 };
+  mirs.forEach(m => { if (counts[m.status] !== undefined) counts[m.status]++; });
+  const statColors = { 'Pending Approval': '#1d4ed8', 'Approved': '#15803d', 'In Procurement': '#a16207', 'Delivered': '#065f46' };
+  let html = '<div class="dash-header"><div class="dash-title">FSIME — All Material Requests</div><button class="new-btn" onclick="switchTab(\'chat\')">+ New MIR</button></div>';
+  html += '<div class="stats-grid">';
+  ['Pending Approval', 'Approved', 'In Procurement', 'Delivered'].forEach(s => {
+    html += '<div class="stat"><div class="stat-n" style="color:' + statColors[s] + '">' + counts[s] + '</div><div class="stat-l">' + s + '</div></div>';
   });
-  html+='</div>';
-  mirs.forEach((mir,i)=>{
-    const d=new Date(mir.submittedAt);
-    const ds=d.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'});
-    html+='<div class="mir-card"><div class="mir-top"><div>';
-    html+='<div style="display:flex;align-items:center;flex-wrap:wrap;gap:2px">';
-    html+='<span class="mir-id">'+esc(mir.id)+'</span>';
-    html+='<span class="badge '+priClass(mir.priority)+'">'+esc(mir.priority)+'</span>';
-    html+='<span class="badge '+statusClass(mir.status)+'">'+esc(mir.status)+'</span></div>';
-    html+='<div class="mir-proj">🏗 '+esc(mir.project)+' &mdash; '+esc(mir.location)+'</div>';
-    html+='<div class="mir-mat">🔥 '+esc(mir.category)+' &mdash; '+esc(mir.materials)+'</div>';
-    html+='</div>';
-    html+='<select class="status-sel" onchange="updateStatus('+i+', this.value)">';
-    ['Pending Approval','Approved','In Procurement','Delivered'].forEach(s=>{
-      html+='<option'+(mir.status===s?' selected':'')+'>'+s+'</option>';
+  html += '</div>';
+  mirs.forEach((mir, i) => {
+    const d = new Date(mir.submittedAt);
+    const ds = d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+    html += '<div class="mir-card"><div class="mir-top"><div>';
+    html += '<div style="display:flex;align-items:center;flex-wrap:wrap;gap:2px">';
+    html += '<span class="mir-id">' + esc(mir.id) + '</span>';
+    html += '<span class="badge ' + priClass(mir.priority) + '">' + esc(mir.priority) + '</span>';
+    html += '<span class="badge ' + statusClass(mir.status) + '">' + esc(mir.status) + '</span></div>';
+    html += '<div class="mir-proj">🏗 ' + esc(mir.project) + ' &mdash; ' + esc(mir.location) + '</div>';
+    html += '<div class="mir-mat">🔥 ' + esc(mir.category) + ' &mdash; ' + esc(mir.materials) + '</div>';
+    html += '</div>';
+    html += '<select class="status-sel" onchange="updateStatus(' + i + ', this.value)">';
+    ['Pending Approval', 'Approved', 'In Procurement', 'Delivered'].forEach(s => {
+      html += '<option' + (mir.status === s ? ' selected' : '') + '>' + s + '</option>';
     });
-    html+='</select></div>';
-    html+='<div class="mir-meta">';
-    html+='<span>👤 '+esc(mir.name)+' · '+esc(mir.designation)+'</span>';
-    html+='<span>✅ Approver: '+esc(mir.approver)+'</span>';
-    html+='<span>📅 Need by: '+esc(mir.deliveryDate)+'</span>';
-    html+='<span style="margin-left:auto">Submitted '+ds+'</span>';
-    html+='</div></div>';
+    html += '</select></div>';
+    html += '<div class="mir-meta">';
+    html += '<span>👤 ' + esc(mir.name) + ' · ' + esc(mir.designation) + '</span>';
+    html += '<span>✅ Approver: ' + esc(mir.approver) + '</span>';
+    html += '<span>📅 Need by: ' + esc(mir.deliveryDate) + '</span>';
+    html += '<span style="margin-left:auto">Submitted ' + ds + '</span>';
+    html += '</div></div>';
   });
-  el.innerHTML=html;
+  el.innerHTML = html;
 }
 
-(function init() {
-  document.getElementById('tab-dash').textContent='📋 Dashboard'+(mirs.length?' ('+mirs.length+')':'');
-  const welcome = 'Hello! Welcome to FSIME MIR Bot.\n\nI\'ll help you raise a Material Indent Request for your project quickly.\n\nKindly provide your details — let\'s start with your full name.';
-  messages.push({ role:'assistant', content:welcome });
-  addBubble('bot', welcome);
+// INIT
+(function () {
+  const k = getKey();
+  if (k) {
+    document.getElementById('setup-screen').style.display = 'none';
+    document.getElementById('view-chat').className = 'view active';
+    startChat();
+  }
 })();
 </script>
 </body>
