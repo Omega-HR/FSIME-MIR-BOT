@@ -166,4 +166,109 @@ async function sendMsg() {
   try {
     const res = await fetch(WORKER_URL, {
       method: 'POST',
-      headers: { 'Cont
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5',
+        max_tokens: 1000,
+        system: SYSTEM,
+        messages: messages
+      })
+    });
+    const data = await res.json();
+    removeTyping();
+    if (data.error) { addBubble('bot','Error: '+data.error.message); busy=false; document.getElementById('send-btn').disabled=false; return; }
+    const reply = data.content&&data.content[0] ? data.content[0].text : 'Something went wrong. Please try again.';
+    if (reply.trim().startsWith('SUBMIT_MIR:')) {
+      const raw = reply.trim().replace('SUBMIT_MIR:','').trim();
+      let mir; try { mir=JSON.parse(raw); } catch(e) { mir=null; }
+      if (mir) {
+        mir.id = 'MIR-'+(1000+Math.floor(Math.random()*9000));
+        mir.status = 'Pending Approval';
+        mir.submittedAt = new Date().toISOString();
+        mirs.unshift(mir);
+        saveMIRs();
+        const confirmText = 'MIR submitted successfully!\n\nID: '+mir.id+'\nName: '+mir.name+' ('+mir.designation+')\nProject: '+mir.project+' — '+mir.location+'\nCategory: '+mir.category+'\nMaterials: '+mir.materials+'\nDelivery: '+mir.deliveryDate+'\nPriority: '+mir.priority+'\nApprover: '+mir.approver+'\n\nYour request is logged. Track it in the Dashboard. Need to raise another MIR?';
+        messages.push({ role:'assistant', content:confirmText });
+        addBubble('bot', confirmText);
+        document.getElementById('tab-dash').textContent = '📋 Dashboard ('+mirs.length+')';
+      }
+    } else {
+      messages.push({ role:'assistant', content:reply });
+      addBubble('bot', reply);
+    }
+  } catch(e) {
+    removeTyping();
+    addBubble('bot','Connection error: '+e.message+'. Please check your internet and try again.');
+  }
+  busy = false;
+  document.getElementById('send-btn').disabled = false;
+  document.getElementById('user-input').focus();
+}
+
+function statusClass(s) {
+  if(s==='Pending Approval') return 's-pending';
+  if(s==='Approved') return 's-approved';
+  if(s==='In Procurement') return 's-procure';
+  if(s==='Delivered') return 's-delivered';
+  return 's-pending';
+}
+function priClass(p) {
+  if(p==='Low') return 'p-low';
+  if(p==='Medium') return 'p-medium';
+  if(p==='High') return 'p-high';
+  if(p==='Urgent') return 'p-urgent';
+  return 'p-medium';
+}
+
+function updateStatus(idx, val) { mirs[idx].status=val; saveMIRs(); renderDash(); }
+
+function renderDash() {
+  const el = document.getElementById('dashboard');
+  if (mirs.length===0) {
+    el.innerHTML='<div class="empty"><div class="empty-icon">📋</div><div>No MIRs submitted yet.</div><div style="margin-top:8px;font-size:12px">Use the Bot tab to raise your first request.</div></div>';
+    return;
+  }
+  const counts={'Pending Approval':0,'Approved':0,'In Procurement':0,'Delivered':0};
+  mirs.forEach(m=>{ if(counts[m.status]!==undefined) counts[m.status]++; });
+  const statColors={'Pending Approval':'#1d4ed8','Approved':'#15803d','In Procurement':'#a16207','Delivered':'#065f46'};
+  let html='<div class="dash-header"><div class="dash-title">FSIME — All Material Requests</div><button class="new-btn" onclick="switchTab(\'chat\')">+ New MIR</button></div>';
+  html+='<div class="stats-grid">';
+  ['Pending Approval','Approved','In Procurement','Delivered'].forEach(s=>{
+    html+='<div class="stat"><div class="stat-n" style="color:'+statColors[s]+'">'+counts[s]+'</div><div class="stat-l">'+s+'</div></div>';
+  });
+  html+='</div>';
+  mirs.forEach((mir,i)=>{
+    const d=new Date(mir.submittedAt);
+    const ds=d.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'});
+    html+='<div class="mir-card"><div class="mir-top"><div>';
+    html+='<div style="display:flex;align-items:center;flex-wrap:wrap;gap:2px">';
+    html+='<span class="mir-id">'+esc(mir.id)+'</span>';
+    html+='<span class="badge '+priClass(mir.priority)+'">'+esc(mir.priority)+'</span>';
+    html+='<span class="badge '+statusClass(mir.status)+'">'+esc(mir.status)+'</span></div>';
+    html+='<div class="mir-proj">🏗 '+esc(mir.project)+' &mdash; '+esc(mir.location)+'</div>';
+    html+='<div class="mir-mat">🔥 '+esc(mir.category)+' &mdash; '+esc(mir.materials)+'</div>';
+    html+='</div>';
+    html+='<select class="status-sel" onchange="updateStatus('+i+', this.value)">';
+    ['Pending Approval','Approved','In Procurement','Delivered'].forEach(s=>{
+      html+='<option'+(mir.status===s?' selected':'')+'>'+s+'</option>';
+    });
+    html+='</select></div>';
+    html+='<div class="mir-meta">';
+    html+='<span>👤 '+esc(mir.name)+' · '+esc(mir.designation)+'</span>';
+    html+='<span>✅ Approver: '+esc(mir.approver)+'</span>';
+    html+='<span>📅 Need by: '+esc(mir.deliveryDate)+'</span>';
+    html+='<span style="margin-left:auto">Submitted '+ds+'</span>';
+    html+='</div></div>';
+  });
+  el.innerHTML=html;
+}
+
+(function init() {
+  document.getElementById('tab-dash').textContent='📋 Dashboard'+(mirs.length?' ('+mirs.length+')':'');
+  const welcome = 'Hello! Welcome to FSIME MIR Bot.\n\nI\'ll help you raise a Material Indent Request for your project quickly.\n\nKindly provide your details — let\'s start with your full name.';
+  messages.push({ role:'assistant', content:welcome });
+  addBubble('bot', welcome);
+})();
+</script>
+</body>
+</html>
